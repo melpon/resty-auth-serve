@@ -1,0 +1,464 @@
+# via: https://dev.classmethod.jp/cloud/aws/cloudformation-fargate/
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description:
+  Fargate and ALB Create
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: "Project Name Prefix"
+        Parameters:
+          - ProjectName
+      - Label:
+          default: "InternetALB Configuration"
+        Parameters:
+          - InternetALBName
+          - TargetGroupName
+      - Label:
+          default: "Fargate for ECS Configuration"
+        Parameters:
+          - ECSClusterName
+          - ECSTaskName
+          - ECSTaskCPUUnit
+          - ECSTaskMemory
+          - ECSContainerName
+          - ECSImageName
+          - ECSServiceName
+          - ECSTaskDesiredCount
+      - Label:
+          default: "Netowork Configuration"
+        Parameters:
+          - VpcId
+          - ALBSecurityGroupId
+          - ALBSubnetId1
+          - ALBSubnetId2
+          - ECSSecurityGroupId
+          - ECSSubnetId1
+          - ECSSubnetId2
+      - Label:
+          default: "Scaling Configuration"
+        Parameters:
+          - ServiceScaleEvaluationPeriods
+          - ServiceCpuScaleOutThreshold
+          - ServiceCpuScaleInThreshold
+          - TaskMinContainerCount
+          - TaskMaxContainerCount
+
+    ParameterLabels:
+      InternetALBName:
+        default: "InternetALBName"
+      TargetGroupName:
+        default: "TargetGroupName"
+      ECSClusterName:
+        default: "ECSClusterName"
+      ECSTaskName:
+        default: "ECSTaskName"
+      ECSTaskCPUUnit:
+        default: "ECSTaskCPUUnit"
+      ECSTaskMemory:
+        default: "ECSTaskMemory"
+      ECSContainerName:
+        default: "ECSContainerName"
+      ECSImageName:
+        default: "ECSImageName"
+      ECSServiceName:
+        default: "ECSServiceName"
+      ECSTaskDesiredCount:
+        default: "ECSTaskDesiredCount"
+
+# ------------------------------------------------------------#
+# Input Parameters
+# ------------------------------------------------------------# 
+Parameters:
+  ProjectName:
+    Default: kaji-test
+    Type: String
+
+#VPCID
+  VpcId:
+    Description : "VPC ID"
+    Type: AWS::EC2::VPC::Id
+
+#ALBSecurity Group
+  ALBSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+
+#ALBSubnet1
+  ALBSubnetId1:
+    Description : "ALB Subnet 1st"
+    Type : AWS::EC2::Subnet::Id
+
+#ALBSubnet2
+  ALBSubnetId2:
+    Description : "ALB Subnet 2st"
+    Type : AWS::EC2::Subnet::Id
+
+#ECSSecurity Group
+  ECSSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+
+#ECSSubnet1
+  ECSSubnetId1:
+    Description : "ECS Subnet 1st"
+    Type : AWS::EC2::Subnet::Id
+
+#ECSSubnet2
+  ECSSubnetId2:
+    Description : "ECS Subnet 2st"
+    Type : AWS::EC2::Subnet::Id
+
+#InternetALB
+  InternetALBName:
+    Type: String
+    Default: "alb"
+
+#TargetGroupName
+  TargetGroupName:
+    Type: String
+    Default: "tg"
+
+#ECSClusterName
+  ECSClusterName:
+    Type: String
+    Default: "cluster"
+
+#ECSTaskName
+  ECSTaskName:
+    Type: String
+    Default: "task"
+
+#ECSTaskCPUUnit
+  ECSTaskCPUUnit:
+    AllowedValues: [ 256, 512, 1024, 2048, 4096  ]
+    Type: String
+    Default: "256"
+
+#ECSTaskMemory
+  ECSTaskMemory:
+    AllowedValues: [ 256, 512, 1024, 2048, 4096  ]
+    Type: String
+    Default: "512"
+
+#ECSContainerName
+  ECSContainerName:
+    Type: String
+    Default: "container"
+
+#ECSImageName
+  ECSImageName:
+    Type: String
+    Default: "xxxxxxxxxxxx.dkr.ecr.ap-northeast-1.amazonaws.com/kaji-test-ecr:latest"
+
+#ECSServiceName
+  ECSServiceName:
+    Type: String
+    Default: "service"
+
+#ECSTaskDesiredCount
+  ECSTaskDesiredCount:
+    Type: Number
+    Default: 1
+
+# Scaling params
+  ServiceScaleEvaluationPeriods:
+    Description: The number of periods over which data is compared to the specified threshold
+    Type: Number
+    Default: 2
+    MinValue: 2
+
+  ServiceCpuScaleOutThreshold:
+    Type: Number
+    Description: Average CPU value to trigger auto scaling out
+    Default: 50
+    MinValue: 0
+    MaxValue: 100
+    ConstraintDescription: Value must be between 0 and 100
+
+  ServiceCpuScaleInThreshold:
+    Type: Number
+    Description: Average CPU value to trigger auto scaling in
+    Default: 25
+    MinValue: 0
+    MaxValue: 100
+    ConstraintDescription: Value must be between 0 and 100
+
+  TaskMinContainerCount:
+    Type: Number
+    Description: Minimum number of containers to run for the service
+    Default: 1
+    MinValue: 1
+    ConstraintDescription: Value must be at least one
+
+  TaskMaxContainerCount:
+    Type: Number
+    Description: Maximum number of containers to run for the service when auto scaling out
+    Default: 2
+    MinValue: 1
+    ConstraintDescription: Value must be at least one
+
+Resources:
+
+# ------------------------------------------------------------#
+#  Target Group
+# ------------------------------------------------------------#
+  TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      VpcId: !Ref VpcId
+      Name: !Sub "${ProjectName}-${TargetGroupName}"
+      Protocol: HTTP
+      Port: 80
+      TargetType: ip
+      Matcher:
+        HttpCode: 200-399
+
+# ------------------------------------------------------------#
+#  Internet ALB
+# ------------------------------------------------------------#
+  InternetALB:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: !Sub "${ProjectName}-${InternetALBName}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${InternetALBName}"
+      Scheme: "internet-facing"
+      # LoadBalancerAttributes:
+      #   - Key: "deletion_protection.enabled"
+      #     Value: false
+      #   - Key: "idle_timeout.timeout_seconds"
+      #     Value: 60
+      #   - Key: "access_logs.s3.enabled"
+      #     Value: true
+      #   - Key: "access_logs.s3.bucket"
+      #     Value: !Sub "alb-log-${AWS::AccountId}"
+      SecurityGroups:
+        - !Ref ALBSecurityGroupId
+      Subnets:
+        - !Ref ALBSubnetId1
+        - !Ref ALBSubnetId2
+
+  ALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref InternetALB
+      Port: 80
+      Protocol: HTTP
+
+# ------------------------------------------------------------#
+# ECS Cluster
+# ------------------------------------------------------------#
+  ECSCluster:
+    Type: "AWS::ECS::Cluster"
+    Properties:
+      ClusterName: !Sub "${ProjectName}-${ECSClusterName}"
+
+# ------------------------------------------------------------#
+#  ECS LogGroup
+# ------------------------------------------------------------#
+  ECSLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/ecs/logs/${ProjectName}-ecs-group"
+
+# ------------------------------------------------------------#
+#  ECS Task Execution Role
+# ------------------------------------------------------------#
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-ECSTaskExecutionRolePolicy"
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+# ------------------------------------------------------------#
+#  ECS TaskDefinition
+# ------------------------------------------------------------#
+  ECSTaskDefinition:
+    Type: "AWS::ECS::TaskDefinition"
+    Properties:
+      Cpu: !Ref ECSTaskCPUUnit
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      TaskRoleArn: !Ref ECSTaskExecutionRole
+      Family: !Sub "${ProjectName}-${ECSTaskName}"
+      Memory: !Ref ECSTaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+
+#ContainerDefinitions
+      ContainerDefinitions:
+        - Name: !Sub "${ProjectName}-${ECSContainerName}"
+          Image: !Ref ECSImageName
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: !Ref ProjectName
+          MemoryReservation: 128
+          PortMappings:
+            - HostPort: 80
+              Protocol: tcp
+              ContainerPort: 80
+
+# ------------------------------------------------------------#
+#  ECS Service
+# ------------------------------------------------------------#
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBListener
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: !Ref ECSTaskDesiredCount
+      LaunchType: FARGATE
+      LoadBalancers:
+        -
+          TargetGroupArn: !Ref TargetGroup
+          ContainerPort: 80
+          ContainerName: !Sub "${ProjectName}-${ECSContainerName}"
+      NetworkConfiguration:
+       AwsvpcConfiguration:
+           AssignPublicIp: ENABLED
+           SecurityGroups:
+             - !Ref ECSSecurityGroupId
+           Subnets:
+             - !Ref ECSSubnetId1
+             - !Ref ECSSubnetId2
+      ServiceName: !Sub "${ProjectName}-${ECSServiceName}"
+      TaskDefinition: !Ref ECSTaskDefinition
+
+# ------------------------------------------------------------#
+#  Auto Scaling Service
+# ------------------------------------------------------------#
+  ServiceAutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: application-autoscaling.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${ECSContainerName}-autoscaling"
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - application-autoscaling:*
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:PutMetricAlarm
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                Resource: '*'
+
+  ServiceScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MinCapacity: !Ref TaskMinContainerCount
+      MaxCapacity: !Ref TaskMaxContainerCount
+      ResourceId: !Sub
+        - service/${EcsClusterName}/${EcsDefaultServiceName}
+        - EcsClusterName: !Ref ECSCluster
+          EcsDefaultServiceName: !Sub "${ProjectName}-${ECSServiceName}"
+      RoleARN: !GetAtt ServiceAutoScalingRole.Arn
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+    DependsOn:
+      - ECSService
+      - ServiceAutoScalingRole
+
+  ServiceScaleOutPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${ProjectName}-${ECSServiceName}-ScaleOutPolicy"
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+          - ScalingAdjustment: 1
+            MetricIntervalLowerBound: 0
+    DependsOn: ServiceScalingTarget
+
+  ServiceScaleInPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${ProjectName}-${ECSServiceName}-ScaleInPolicy"
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+          - ScalingAdjustment: -1
+            MetricIntervalUpperBound: 0
+    DependsOn: ServiceScalingTarget
+
+  ServiceScaleOutAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${ECSServiceName}-ScaleOutAlarm"
+      EvaluationPeriods: !Ref ServiceScaleEvaluationPeriods
+      Statistic: Average
+      TreatMissingData: notBreaching
+      Threshold: !Ref ServiceCpuScaleOutThreshold
+      AlarmDescription: Alarm to add capacity if CPU is high
+      Period: 60
+      AlarmActions:
+        - !Ref ServiceScaleOutPolicy
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+        - Name: ServiceName
+          Value: !Sub "${ProjectName}-${ECSServiceName}"
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUUtilization
+    DependsOn:
+      - ECSService
+      - ServiceScaleOutPolicy
+
+  ServiceScaleInAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${ECSServiceName}-ScaleInAlarm"
+      EvaluationPeriods: !Ref ServiceScaleEvaluationPeriods
+      Statistic: Average
+      TreatMissingData: notBreaching
+      Threshold: !Ref ServiceCpuScaleInThreshold
+      AlarmDescription: Alarm to reduce capacity if container CPU is low
+      Period: 300
+      AlarmActions:
+        - !Ref ServiceScaleInPolicy
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+        - Name: ServiceName
+          Value: !Sub "${ProjectName}-${ECSServiceName}"
+      ComparisonOperator: LessThanThreshold
+      MetricName: CPUUtilization
+    DependsOn:
+      - ECSService
+      - ServiceScaleInPolicy

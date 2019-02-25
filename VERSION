@@ -1,0 +1,26 @@
+
+# 利用する依存ライブラリや、このアプリケーションのバージョンを定義したファイル
+
+RESTY_AUTH_SERVE_IMAGE_VERSION="0.0.18"
+
+RESTY_AUTH_SERVE_IMAGE="$ECR_URI:$RESTY_AUTH_SERVE_IMAGE_VERSION"
+
+OPENRESTY_IMAGE="openresty/openresty:1.13.6.2-2-bionic"
+
+LUA_RESTY_OPENIDC=1.7.0
+LUA_RESTY_HTTP=0.13
+LUA_RESTY_SESSION=2.23
+LUA_RESTY_JWT=0.2.0
+LUA_RESTY_HMAC=989f601acbe74dee71c1a48f3e140a427f2d03ae
+
+if [ -e VERSION.local ]; then
+  source VERSION.local
+fi
+
+if [ -z "$ECR_URI" ]; then
+  echo "環境変数 ECR_URI が定義されていません。"
+  echo ""
+  echo "cfn/ecr.yaml を CloudFormation で実行して ECR を構築するか、"
+  echo "手動で ECR を構築して、その URI を ECR_URI に定義してください。"
+  exit 1
+fi

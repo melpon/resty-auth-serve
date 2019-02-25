@@ -1,0 +1,9 @@
+/secret.lua
+/VERSION.local
+/local.sh
+/local/secret.lua
+/local/lua-resty-http/
+/local/lua-resty-openidc/
+/local/lua-resty-hmac/
+/local/lua-resty-jwt/
+/local/lua-resty-session/
